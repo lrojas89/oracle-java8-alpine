@@ -1,0 +1,61 @@
+# Use Alpine Linux 3.21.3 as base image
+FROM alpine:3.21.3
+
+ENV ORACLE_BASE=/usr/lib/instantclient
+ENV LD_LIBRARY_PATH=/usr/lib/instantclient
+ENV TNS_ADMIN=/usr/lib/instantclient
+ENV ORACLE_HOME=/usr/lib/instantclient
+
+ENV LIBRARY_PATH=/lib:/usr/lib
+
+# Install necessary dependencies
+RUN apk add --no-cache \
+    wget \
+    tar \
+    libstdc++ \
+    ca-certificates \
+    && rm -rf /var/cache/apk/*
+
+# Download and install glibc compatibility layer for Alpine
+RUN wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub \
+    && wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-2.34-r0.apk \
+    && apk add --no-cache --force-overwrite glibc-2.34-r0.apk \
+    && rm glibc-2.34-r0.apk
+
+# Download Oracle JDK 8u131
+# Note: Oracle requires accepting their license agreement
+ENV JAVA_VERSION=8u131
+ENV JAVA_BUILD=8u131-b11
+ENV JAVA_HASH=d54c1d3a095b4ff2b6607d096fa80163
+
+# Download and install Oracle JRE 8u131
+#RUN mkdir -p /usr/java \
+#    && wget --no-check-certificate --no-cookies --header "Cookie: oraclelicense=accept-securebackup-cookie" \
+#    https://download.oracle.com/otn-pub/java/jdk/8u131-b11/d54c1d3a095b4ff2b6607d096fa80163/jre-8u131-linux-x64.tar.gz \
+#    -O /tmp/jre.tar.gz \
+#    && tar -xzf /tmp/jre.tar.gz -C /usr/java \
+#    && rm /tmp/jre.tar.gz
+
+COPY jre-8u131-linux-x64.tar.gz /tmp/
+
+# Install Oracle JDK
+RUN mkdir -p mkdir -p /usr/java \
+    && tar -xzf /tmp/jre-8u131-linux-x64.tar.gz -C /usr/java \
+    && rm /tmp/jre-8u131-linux-x64.tar.gz
+
+# Set environment variables
+ENV JAVA_HOME=/usr/java/jre1.8.0_131
+ENV PATH=$PATH:$JAVA_HOME/bin
+ENV LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/amd64:$JAVA_HOME/jre/lib/amd64/server
+
+# Create symlinks in /usr/bin (this is what was missing)
+RUN ln -sf $JAVA_HOME/bin/java /usr/bin/java
+
+# Set the working directory
+#WORKDIR /opt
+
+# Verify installation
+RUN java -version
+
+# Default command to display Java version when container starts
+CMD ["/bin/sh"]

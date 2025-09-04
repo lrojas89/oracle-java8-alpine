@@ -1,0 +1,79 @@
+# Use Alpine Linux 3.21.3 as base image
+FROM alpine:3.21.3
+
+ENV ORACLE_BASE=/usr/lib/instantclient
+ENV LD_LIBRARY_PATH=/usr/lib/instantclient
+ENV TNS_ADMIN=/usr/lib/instantclient
+ENV ORACLE_HOME=/usr/lib/instantclient
+
+ENV LIBRARY_PATH=/lib:/usr/lib
+
+# Install necessary dependencies
+RUN apk add --no-cache \
+    wget \
+    tar \
+    libstdc++ \
+    ca-certificates \
+    && rm -rf /var/cache/apk/*
+
+# Download and install glibc compatibility layer for Alpine
+RUN wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub \
+    && wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-2.34-r0.apk \
+    && apk add --no-cache --force-overwrite glibc-2.34-r0.apk \
+    && rm glibc-2.34-r0.apk
+
+# Download Oracle JDK 8u131
+# Note: Oracle requires accepting their license agreement
+ENV JAVA_VERSION=8u131
+ENV JAVA_BUILD=8u131-b11
+ENV JAVA_HASH=d54c1d3a095b4ff2b6607d096fa80163
+#RUN wget --no-check-certificate --no-cookies --header "Cookie: oraclelicense=accept-securebackup-cookie" \
+#    https://download.oracle.com/otn-pub/java/jdk/${JAVA_BUILD}/${JAVA_HASH}/jdk-${JAVA_VERSION}-linux-x64.tar.gz \
+#    -O /tmp/jdk-${JAVA_VERSION}-linux-x64.tar.gz
+
+COPY jdk-8u131-linux-x64.tar.gz /tmp/
+
+# Install Oracle JDK
+RUN mkdir -p /usr/lib/jvm \
+    && tar -xzf /tmp/jdk-8u131-linux-x64.tar.gz -C /usr/lib/jvm \
+    && rm /tmp/jdk-8u131-linux-x64.tar.gz \
+    && mv /usr/lib/jvm/jdk1.8.0_131 /usr/lib/jvm/java-8-oracle
+
+# Set environment variables
+ENV JAVA_HOME=/usr/lib/jvm/java-8-oracle
+ENV PATH=$PATH:$JAVA_HOME/bin
+ENV LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/amd64:$JAVA_HOME/jre/lib/amd64/server
+
+# Create symlinks in /usr/bin (this is what was missing)
+RUN ln -sf $JAVA_HOME/bin/java /usr/bin/java && \
+    ln -sf $JAVA_HOME/bin/javac /usr/bin/javac && \
+    ln -s $JAVA_HOME/jre/lib/amd64/server/libjvm.so /usr/lib/libjvm.so
+
+# Verify Java installation
+RUN java -version && javac -version && mvn --version
+
+# Set the working directory
+WORKDIR /opt
+
+COPY instantclient_12_1.zip .
+
+RUN unzip instantclient_12_1.zip && \
+    mv instantclient_12_1 /usr/lib/instantclient && \
+    rm instantclient_12_1.zip && \
+    ln -s /usr/lib/instantclient/libclntsh.so.12.1 /usr/lib/libclntsh.so && \
+    ln -s /usr/lib/instantclient/libocci.so.12.1 /usr/lib/libocci.so && \
+    ln -s /usr/lib/instantclient/libnnz12.so /usr/lib/libnnz12.so && \
+    ln -s /usr/lib/libnsl.so.2 /usr/lib/libnsl.so.1 && \
+    ln -s /lib64/ld-linux-x86-64.so.2 /usr/lib/ld-linux-x86-64.so.2
+
+# Method 1: Download Maven directly (recommended)
+RUN wget https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz \
+    && tar -xzf apache-maven-3.9.9-bin.tar.gz -C /opt \
+    && ln -s /opt/apache-maven-3.9.9/bin/mvn /usr/bin/mvn \
+    && rm apache-maven-3.9.9-bin.tar.gz
+
+# Verify Maven installation
+RUN mvn --version
+
+# Default command to display Java version when container starts
+CMD ["/bin/sh"]
